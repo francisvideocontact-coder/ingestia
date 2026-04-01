@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   FileText, ImageIcon, Loader2, Trash2, CheckCircle,
-  AlertCircle, Clock, Send, ChevronDown, ChevronUp, Eye
+  AlertCircle, Clock, Send, ChevronDown, ChevronUp, Eye, XCircle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -97,6 +97,7 @@ export default function DocumentCard({ document: doc, onDelete, onUpdate, worksp
   const isPending = doc.status === 'pending'
   const isError = doc.status === 'error'
   const isVerified = doc.status === 'verified'
+  const isValidated = doc.status === 'validated'
   const overallScore = doc.confidence_scores?.overall
 
   const handleDelete = async () => {
@@ -113,6 +114,15 @@ export default function DocumentCard({ document: doc, onDelete, onUpdate, worksp
     setValidating(true)
     try {
       await onUpdate(doc.id, { status: 'validated' })
+    } finally {
+      setValidating(false)
+    }
+  }
+
+  const handleUnvalidate = async () => {
+    setValidating(true)
+    try {
+      await onUpdate(doc.id, { status: 'verified' })
     } finally {
       setValidating(false)
     }
@@ -200,7 +210,7 @@ export default function DocumentCard({ document: doc, onDelete, onUpdate, worksp
         <div className="flex items-center gap-1 shrink-0">
           {!isPending && !isError && (
             <>
-              {/* Quick validate for verified docs */}
+              {/* Quick validate / unvalidate */}
               {isVerified && (
                 <Button
                   variant="ghost"
@@ -213,6 +223,21 @@ export default function DocumentCard({ document: doc, onDelete, onUpdate, worksp
                   {validating
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     : <CheckCircle className="h-3.5 w-3.5" />
+                  }
+                </Button>
+              )}
+              {isValidated && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                  onClick={handleUnvalidate}
+                  disabled={validating}
+                  title="Retirer la validation"
+                >
+                  {validating
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <XCircle className="h-3.5 w-3.5" />
                   }
                 </Button>
               )}

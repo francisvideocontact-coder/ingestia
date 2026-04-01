@@ -13,6 +13,7 @@ import SettingsModal from '@/components/settings/SettingsModal'
 import { useAuth } from '@/hooks/useAuth'
 import { useWorkspace } from '@/hooks/useWorkspace'
 import { useDocuments } from '@/hooks/useDocuments'
+import { useGoogleDrive } from '@/hooks/useGoogleDrive'
 
 // ─── Stats bar ────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,7 @@ export default function DashboardPage() {
     deleteDocument,
     updateDocument,
   } = useDocuments(workspace?.id)
+  const { exportDocument } = useGoogleDrive(workspace?.id)
 
   // Compute status counts
   const statusCounts = documents.reduce(
@@ -223,6 +225,11 @@ export default function DashboardPage() {
                 onDelete={deleteDocument}
                 onUpdate={updateDocument}
                 workspaceId={workspace.id}
+                onExportMonth={async (docIds) => {
+                  for (const id of docIds) {
+                    await exportDocument(id)
+                  }
+                }}
               />
             </div>
           </>

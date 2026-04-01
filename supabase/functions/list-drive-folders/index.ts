@@ -54,8 +54,8 @@ Deno.serve(async (req) => {
       .eq('user_id', user.id)
 
     if (!count || count === 0) {
-      return new Response(JSON.stringify({ error: 'Access denied' }), {
-        status: 403,
+      return new Response(JSON.stringify({ error: 'access_denied' }), {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
@@ -113,15 +113,15 @@ Deno.serve(async (req) => {
     const listData = await listRes.json()
 
     if (!listRes.ok) {
-      // Scope insuffisant → message spécifique
+      // Scope insuffisant → message spécifique (200 pour que le client puisse lire le body)
       if (listRes.status === 403) {
         return new Response(JSON.stringify({ error: 'insufficient_scope' }), {
-          status: 403,
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
-      return new Response(JSON.stringify({ error: 'Failed to list Drive folders: ' + JSON.stringify(listData) }), {
-        status: 502,
+      return new Response(JSON.stringify({ error: 'drive_error', detail: JSON.stringify(listData) }), {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }

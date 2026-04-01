@@ -176,7 +176,7 @@ export default function DocumentSheet({ document: doc, open, onClose, onUpdate, 
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent
         side="right"
-        className="w-[85vw] max-w-[1100px] p-0 flex flex-col gap-0"
+        className="w-[85vw] max-w-[1100px] sm:max-w-[1100px] p-0 flex flex-col gap-0"
       >
         {/* Header */}
         <SheetHeader className="px-5 py-4 border-b shrink-0">
@@ -197,14 +197,14 @@ export default function DocumentSheet({ document: doc, open, onClose, onUpdate, 
         <div className="flex flex-1 min-h-0">
 
           {/* Left: document preview */}
-          <div className="flex-[55] border-r min-h-0 bg-muted/20 relative overflow-hidden">
+          <div className="flex-[55] border-r min-h-0 bg-muted/20 flex flex-col overflow-hidden">
             {previewLoading && (
-              <div className="flex items-center justify-center h-full">
+              <div className="flex items-center justify-center flex-1">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             )}
             {previewError && (
-              <div className="flex flex-col items-center justify-center h-full gap-2 text-destructive">
+              <div className="flex flex-col items-center justify-center flex-1 gap-2 text-destructive">
                 <AlertCircle className="h-6 w-6" />
                 <p className="text-sm">{previewError}</p>
               </div>
@@ -213,11 +213,11 @@ export default function DocumentSheet({ document: doc, open, onClose, onUpdate, 
               isPdf ? (
                 <iframe
                   src={signedUrl}
-                  className="absolute inset-0 w-full h-full border-0"
+                  className="flex-1 w-full border-0 min-h-0"
                   title={doc.original_filename}
                 />
               ) : (
-                <div className="flex items-center justify-center h-full p-4 overflow-auto">
+                <div className="flex items-center justify-center flex-1 p-4 overflow-auto">
                   <img
                     src={signedUrl}
                     alt={doc.original_filename}

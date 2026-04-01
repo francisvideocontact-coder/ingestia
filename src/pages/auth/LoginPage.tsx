@@ -31,10 +31,15 @@ export default function LoginPage() {
       navigate('/dashboard')
     } catch (err) {
       const error = err as Error
-      if (error.message.includes('Invalid login credentials')) {
-        setServerError('Email ou mot de passe incorrect.')
-      } else if (error.message.includes('Email not confirmed')) {
+      const msg = error.message ?? ''
+      if (msg.includes('Invalid login credentials') || msg.includes('invalid_grant')) {
+        setServerError('credentials')
+      } else if (msg.includes('Email not confirmed')) {
         setServerError('Veuillez confirmer votre email avant de vous connecter.')
+      } else if (msg.includes('rate limit') || msg.includes('too_many_requests')) {
+        setServerError('Trop de tentatives. Attendez quelques minutes avant de réessayer.')
+      } else if (msg.includes('User not found') || msg.includes('user_not_found')) {
+        setServerError('Aucun compte trouvé avec cet email.')
       } else {
         setServerError('Une erreur est survenue. Veuillez réessayer.')
       }
@@ -64,7 +69,16 @@ export default function LoginPage() {
             <CardContent className="space-y-4">
               {serverError && (
                 <Alert variant="destructive">
-                  <AlertDescription>{serverError}</AlertDescription>
+                  <AlertDescription>
+                    {serverError === 'credentials' ? (
+                      <>
+                        Email ou mot de passe incorrect.{' '}
+                        <Link to="/forgot-password" className="underline font-medium">
+                          Mot de passe oublié ?
+                        </Link>
+                      </>
+                    ) : serverError}
+                  </AlertDescription>
                 </Alert>
               )}
 

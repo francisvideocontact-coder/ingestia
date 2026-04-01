@@ -28,7 +28,11 @@
       "Bash(git init:*)",
       "Bash(git add:*)",
       "Bash(git -C /Users/francis/ingestia add .)",
-      "Bash(git -C:*)"
+      "Bash(git -C:*)",
+      "Bash(grep -r \"TODO\\\\|FIXME\\\\|XXX\" /Users/francis/ingestia/src --include=*.tsx --include=*.ts)",
+      "Bash(xargs -I {} basename {})",
+      "Bash(npm install:*)",
+      "Bash(npm list:*)"
     ]
   }
 }

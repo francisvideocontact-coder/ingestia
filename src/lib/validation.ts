@@ -20,6 +20,21 @@ export const registerSchema = z
     path: ['confirmPassword'],
   })
 
+export const resetPasswordSchema = z
+  .object({
+    password: z
+      .string()
+      .min(16, 'Le mot de passe doit contenir au moins 16 caractères')
+      .regex(/[A-Z]/, 'Le mot de passe doit contenir au moins une majuscule')
+      .regex(/[0-9]/, 'Le mot de passe doit contenir au moins un chiffre')
+      .regex(/[!@#$%^&*()\-_=+[\]{};':"\\|,.<>/?]/, 'Le mot de passe doit contenir au moins un caractère spécial'),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Les mots de passe ne correspondent pas',
+    path: ['confirmPassword'],
+  })
+
 export const forgotPasswordSchema = z.object({
   email: z.string().email('Adresse email invalide'),
 })
@@ -36,6 +51,7 @@ export const inviteMemberSchema = z.object({
   role: z.enum(['admin', 'member', 'viewer']),
 })
 
+export type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>
 export type LoginFormData = z.infer<typeof loginSchema>
 export type RegisterFormData = z.infer<typeof registerSchema>
 export type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>

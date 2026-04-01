@@ -3,7 +3,7 @@ import {
   HardDrive, CheckCircle, Loader2, Unplug, FolderOpen, X,
   ChevronRight, Home, Folder, Check, AlertCircle, ArrowLeft,
 } from 'lucide-react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useGoogleDrive } from '@/hooks/useGoogleDrive'
@@ -73,12 +73,16 @@ export default function SettingsModal({ open, onClose, workspaceId, workspaceNam
       const { data, error: fnError } = await supabase.functions.invoke('list-drive-folders', {
         body: { workspace_id: workspaceId, parent_id: parentId },
       })
-      if (fnError) throw fnError
+      if (fnError) throw new Error(fnError.message)
       if (data?.error === 'insufficient_scope') {
         setFoldersError('scope_error')
         return
       }
-      if (data?.error) throw new Error(data.error)
+      if (data?.error === 'access_denied') {
+        setFoldersError('scope_error') // Même UI : reconnexion nécessaire
+        return
+      }
+      if (data?.error) throw new Error(data.detail ?? data.error)
       setFolders(data.folders ?? [])
     } catch (err) {
       setFoldersError((err as Error).message)
@@ -105,9 +109,8 @@ export default function SettingsModal({ open, onClose, workspaceId, workspaceNam
     loadFolders(target.id)
   }
 
-  const handleSelectFolder = async () => {
-    if (!currentFolder.id || !workspaceId) return
-    const path = breadcrumb.slice(1).map((b) => b.name).join('/')
+  const saveFolder = async (folderId: string, folderPath: string) => {
+    if (!workspaceId) return
     setSavingFolder(true)
     try {
       const { data: ws } = await supabase.from('workspaces').select('settings').eq('id', workspaceId).single()
@@ -116,17 +119,28 @@ export default function SettingsModal({ open, onClose, workspaceId, workspaceNam
         .update({
           settings: {
             ...(ws?.settings as object ?? {}),
-            drive_folder_id: currentFolder.id,
-            drive_folder_path: path,
+            drive_folder_id: folderId,
+            drive_folder_path: folderPath,
           },
         })
         .eq('id', workspaceId)
-      setDriveFolderId(currentFolder.id)
-      setDriveFolderPath(path)
+      setDriveFolderId(folderId)
+      setDriveFolderPath(folderPath)
       setView('settings')
     } finally {
       setSavingFolder(false)
     }
+  }
+
+  const handleSelectFolder = async () => {
+    if (!currentFolder.id) return
+    const path = breadcrumb.slice(1).map((b) => b.name).join('/')
+    await saveFolder(currentFolder.id, path)
+  }
+
+  const handleSelectFolderDirect = async (folder: DriveFolder) => {
+    const path = [...breadcrumb.slice(1).map((b) => b.name), folder.name].join('/')
+    await saveFolder(folder.id, path)
   }
 
   // ── Settings actions ─────────────────────────────────────────────────────────
@@ -168,7 +182,7 @@ export default function SettingsModal({ open, onClose, workspaceId, workspaceNam
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       {/* ── Vue : Paramètres ─────────────────────────────────────────────────── */}
       {view === 'settings' && (
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md overflow-hidden" style={{ width: 'min(448px, calc(100vw - 2rem))' }}>
           <DialogHeader>
             <DialogTitle>Paramètres</DialogTitle>
           </DialogHeader>
@@ -188,19 +202,23 @@ export default function SettingsModal({ open, onClose, workspaceId, workspaceNam
               ) : isConnected ? (
                 <div className="space-y-3">
                   {/* Statut */}
-                  <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="rounded-lg border p-3 space-y-2">
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                      <p className="text-sm font-medium">Connecté</p>
+                      <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
+                      <p className="text-sm font-medium flex-1">Connecté</p>
                     </div>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="text-destructive hover:text-destructive"
+                      className="w-full text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
                       onClick={handleDisconnect}
                       disabled={disconnecting}
                     >
-                      {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unplug className="h-4 w-4" />}
+                      {disconnecting
+                        ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        : <Unplug className="mr-2 h-3.5 w-3.5" />
+                      }
+                      Déconnecter Google Drive
                     </Button>
                   </div>
 
@@ -209,9 +227,9 @@ export default function SettingsModal({ open, onClose, workspaceId, workspaceNam
                     <p className="text-xs font-medium text-muted-foreground">Dossier de destination</p>
 
                     {driveFolderId ? (
-                      <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+                      <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 min-w-0">
                         <FolderOpen className="h-4 w-4 text-blue-500 shrink-0" />
-                        <span className="text-xs font-mono flex-1 truncate">{driveFolderPath}</span>
+                        <span className="text-xs font-mono flex-1 truncate min-w-0">{driveFolderPath}</span>
                         {savingFolder
                           ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
                           : (
@@ -225,9 +243,9 @@ export default function SettingsModal({ open, onClose, workspaceId, workspaceNam
                           )}
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 rounded-md border border-dashed px-3 py-2 text-muted-foreground">
+                      <div className="flex items-center gap-2 rounded-md border border-dashed px-3 py-2 text-muted-foreground min-w-0">
                         <FolderOpen className="h-4 w-4 shrink-0 opacity-50" />
-                        <span className="text-xs font-mono flex-1 truncate opacity-60">{defaultFolderLabel}</span>
+                        <span className="text-xs font-mono flex-1 truncate min-w-0 opacity-60">{defaultFolderLabel}</span>
                         <span className="text-xs bg-muted rounded px-1.5 py-0.5 shrink-0">défaut</span>
                       </div>
                     )}
@@ -273,10 +291,11 @@ export default function SettingsModal({ open, onClose, workspaceId, workspaceNam
       {/* ── Vue : Folder picker ──────────────────────────────────────────────── */}
       {view === 'folder_picker' && (
         <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
-          <DialogHeader className="px-4 pt-4 pb-3 border-b">
-            <div className="flex items-center gap-2">
+          {/* Header */}
+          <DialogHeader className="px-4 pt-4 pb-3 border-b shrink-0">
+            <div className="flex items-center gap-3">
               <button
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 onClick={() => setView('settings')}
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -286,19 +305,19 @@ export default function SettingsModal({ open, onClose, workspaceId, workspaceNam
           </DialogHeader>
 
           {/* Breadcrumb */}
-          <div className="flex items-center gap-1 flex-wrap px-4 py-2 bg-muted/30 border-b min-h-[36px]">
+          <div className="flex items-center gap-0.5 flex-wrap px-3 py-2 bg-muted/40 border-b min-h-[38px]">
             {breadcrumb.map((item, i) => (
-              <div key={i} className="flex items-center gap-1">
-                {i > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+              <div key={i} className="flex items-center gap-0.5">
+                {i > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground/50 shrink-0" />}
                 {i < breadcrumb.length - 1 ? (
                   <button
-                    className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors font-medium"
                     onClick={() => navigateTo(i)}
                   >
                     {i === 0 ? <Home className="h-3 w-3" /> : item.name}
                   </button>
                 ) : (
-                  <span className="text-xs font-semibold flex items-center gap-1">
+                  <span className="flex items-center gap-1 px-1.5 py-0.5 text-xs font-semibold">
                     {i === 0 ? <Home className="h-3 w-3" /> : item.name}
                   </span>
                 )}
@@ -307,58 +326,79 @@ export default function SettingsModal({ open, onClose, workspaceId, workspaceNam
           </div>
 
           {/* Folder list */}
-          <div className="min-h-[240px] max-h-[320px] overflow-y-auto">
+          <div className="min-h-[280px] max-h-[360px] overflow-y-auto">
             {foldersLoading ? (
-              <div className="flex items-center justify-center h-[240px]">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <div className="flex flex-col items-center justify-center h-[280px] gap-3 text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <p className="text-xs">Chargement des dossiers…</p>
               </div>
             ) : foldersError === 'scope_error' ? (
-              <div className="flex flex-col items-center justify-center h-[240px] gap-3 px-6 text-center">
-                <AlertCircle className="h-8 w-8 text-amber-500" />
+              <div className="flex flex-col items-center justify-center h-[280px] gap-3 px-6 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+                  <AlertCircle className="h-6 w-6 text-amber-600" />
+                </div>
                 <div>
-                  <p className="text-sm font-medium">Reconnexion nécessaire</p>
+                  <p className="text-sm font-semibold">Reconnexion nécessaire</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Déconnectez Google Drive puis reconnectez-vous pour activer la navigation de dossiers.
+                    Déconnectez Google Drive puis reconnectez-vous pour activer la navigation.
                   </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => setView('settings')}>
-                  <ArrowLeft className="mr-2 h-3.5 w-3.5" />
                   Retour aux paramètres
                 </Button>
               </div>
             ) : foldersError ? (
-              <div className="flex flex-col items-center justify-center h-[240px] gap-3 px-6 text-center">
-                <AlertCircle className="h-6 w-6 text-destructive" />
+              <div className="flex flex-col items-center justify-center h-[280px] gap-3 px-6 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+                  <AlertCircle className="h-6 w-6 text-destructive" />
+                </div>
                 <p className="text-xs text-muted-foreground">{foldersError}</p>
                 <Button variant="outline" size="sm" onClick={() => loadFolders(currentFolder.id)}>
                   Réessayer
                 </Button>
               </div>
             ) : folders.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-[240px] gap-2 text-muted-foreground">
-                <Folder className="h-8 w-8 opacity-30" />
-                <p className="text-sm">Aucun sous-dossier</p>
+              <div className="flex flex-col items-center justify-center h-[280px] gap-2 text-muted-foreground">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                  <Folder className="h-6 w-6 opacity-40" />
+                </div>
+                <p className="text-sm font-medium">Aucun sous-dossier</p>
+                <p className="text-xs opacity-60">Sélectionnez ce dossier ou revenez en arrière</p>
               </div>
             ) : (
-              <ul className="divide-y">
+              <ul>
                 {folders.map((folder) => (
-                  <li key={folder.id}>
-                    <button
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors text-left"
-                      onClick={() => navigateInto(folder)}
-                    >
-                      <Folder className="h-4 w-4 text-blue-500 shrink-0" />
-                      <span className="text-sm truncate flex-1">{folder.name}</span>
-                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    </button>
+                  <li key={folder.id} className="border-b last:border-0">
+                    <div className="flex items-center gap-2 px-3 py-0.5 hover:bg-muted/40 transition-colors group">
+                      {/* Folder icon + name — clicks to SELECT */}
+                      <button
+                        className="flex items-center gap-3 flex-1 py-2.5 text-left min-w-0"
+                        onClick={() => handleSelectFolderDirect(folder)}
+                        title="Sélectionner ce dossier"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 group-hover:bg-blue-100 transition-colors">
+                          <Folder className="h-4 w-4 text-blue-500" />
+                        </div>
+                        <span className="text-sm font-medium truncate flex-1">{folder.name}</span>
+                      </button>
+                      {/* Navigate INTO arrow */}
+                      <button
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors opacity-0 group-hover:opacity-100"
+                        onClick={() => navigateInto(folder)}
+                        title="Ouvrir le dossier"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
           </div>
 
-          <DialogFooter className="px-4 py-3 border-t bg-muted/20 flex-row gap-2 justify-between sm:justify-between">
-            <Button variant="outline" size="sm" onClick={() => setView('settings')}>
+          {/* Footer */}
+          <div className="px-4 py-3 border-t bg-muted/20 flex items-center justify-between gap-2">
+            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setView('settings')}>
               Annuler
             </Button>
             <Button
@@ -370,9 +410,9 @@ export default function SettingsModal({ open, onClose, workspaceId, workspaceNam
                 ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                 : <Check className="mr-2 h-3.5 w-3.5" />
               }
-              Sélectionner ce dossier
+              Choisir « {currentFolder.id ? currentFolder.name : 'Mon Drive'} »
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       )}
     </Dialog>
