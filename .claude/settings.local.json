@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx supabase functions list:*)",
+      "Bash(export PATH=\"/opt/homebrew/bin:$PATH\")",
+      "Bash(supabase functions:*)",
+      "Bash(npx supabase functions deploy:*)",
+      "Bash(npm run supabase:deploy:*)",
+      "Bash(/opt/homebrew/bin/supabase functions deploy:*)",
+      "Bash(npx shadcn@latest add sheet:*)",
+      "Bash(/usr/local/bin/npx shadcn@latest add sheet --yes)",
+      "Bash(node_modules/.bin/shadcn:*)",
+      "Bash(ls:*)",
+      "Bash(/opt/homebrew/bin/npx shadcn@latest add sheet --yes)",
+      "Bash(PATH=\"/opt/homebrew/bin:$PATH\" /opt/homebrew/bin/node:*)",
+      "Bash(PATH=\"/opt/homebrew/bin:$PATH\" /opt/homebrew/bin/npx:*)",
+      "Bash(PATH=\"/opt/homebrew/bin:$PATH\" npm install:*)",
+      "Bash(convert:*)",
+      "Bash(rsvg-convert:*)",
+      "Bash(/opt/ImageMagick/bin/convert:*)",
+      "Bash(npx supabase:*)",
+      "Bash(/opt/homebrew/bin/npx supabase projects list)",
+      "Bash(npm run build:*)",
+      "Bash(/opt/homebrew/bin/npm run build)",
+      "Bash(/usr/local/bin/npm run build)",
+      "Bash(npx:*)"
+    ]
+  }
+}
