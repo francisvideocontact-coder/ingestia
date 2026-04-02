@@ -2,8 +2,8 @@ import type { Document, WorkspaceSettings } from '@/types'
 
 /**
  * Génère le nom de fichier final selon la convention InGest.ia
- * Pattern: {DATE}_{SUPPLIER}_{TYPE}_{CATEGORY}.pdf
- * Exemple: 20250222_AMAZON_FACTURE_MATERIEL.pdf
+ * Pattern par défaut : {DATE}_{SUPPLIER}_{TYPE}_{CATEGORY}.pdf
+ * Avec ndf_prefix activé pour NDF : {DATE}_NDF_{SUPPLIER}_{CATEGORY}.pdf
  */
 export function generateFilename(
   doc: Partial<Document>,
@@ -11,44 +11,40 @@ export function generateFilename(
 ): string {
   const separator = settings?.separator ?? '_'
   const useUpperCase = settings?.case !== 'LOWER'
+  const ndfPrefix = settings?.ndf_prefix ?? false
+  const isNdf = doc.document_type === 'ndf'
 
   const parts: string[] = []
 
   // DATE : YYYYMMDD
-  if (doc.date) {
-    const dateStr = doc.date.replace(/-/g, '')
-    parts.push(dateStr)
-  } else {
-    parts.push('XXXXXXXX')
+  parts.push(doc.date ? doc.date.replace(/-/g, '') : 'XXXXXXXX')
+
+  // NDF prefix — se place juste après la date, remplace le segment TYPE
+  if (ndfPrefix && isNdf) {
+    parts.push(useUpperCase ? 'NDF' : 'ndf')
   }
 
-  // SUPPLIER : nettoyé et normalisé
+  // SUPPLIER
   if (doc.supplier) {
-    const supplier = normalizeSegment(doc.supplier, useUpperCase)
-    parts.push(supplier)
+    parts.push(normalizeSegment(doc.supplier, useUpperCase))
   } else {
-    parts.push('FOURNISSEUR')
+    parts.push(useUpperCase ? 'FOURNISSEUR' : 'fournisseur')
   }
 
-  // TYPE : document type
-  if (doc.document_type) {
-    const type = useUpperCase ? doc.document_type.toUpperCase() : doc.document_type.toLowerCase()
-    // Suffixe NDF si activé
-    const finalType =
-      doc.document_type === 'ndf' && settings?.ndf_suffix
-        ? `${type}_NDF`
-        : type
-    parts.push(finalType)
-  } else {
-    parts.push('DOCUMENT')
+  // TYPE — uniquement si pas déjà indiqué par le préfixe NDF
+  if (!(ndfPrefix && isNdf)) {
+    if (doc.document_type) {
+      parts.push(useUpperCase ? doc.document_type.toUpperCase() : doc.document_type.toLowerCase())
+    } else {
+      parts.push(useUpperCase ? 'DOCUMENT' : 'document')
+    }
   }
 
   // CATEGORY
   if (doc.category) {
-    const category = normalizeSegment(doc.category, useUpperCase)
-    parts.push(category)
+    parts.push(normalizeSegment(doc.category, useUpperCase))
   } else {
-    parts.push('CATEGORIE')
+    parts.push(useUpperCase ? 'CATEGORIE' : 'categorie')
   }
 
   return parts.join(separator) + '.pdf'
@@ -60,7 +56,7 @@ export function generateFilename(
  * - Remplace les espaces et caractères spéciaux par des underscores
  * - Passe en majuscules si demandé
  */
-function normalizeSegment(value: string, uppercase: boolean): string {
+export function normalizeSegment(value: string, uppercase: boolean): string {
   let normalized = value
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // Supprimer les accents
@@ -80,21 +76,4 @@ export function formatDateForNomenclature(date: Date | string): string {
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${year}${month}${day}`
-}
-
-/**
- * Prévisualise le nom de fichier en temps réel
- */
-export function previewFilename(
-  supplier?: string,
-  date?: string,
-  documentType?: string,
-  category?: string
-): string {
-  return generateFilename({
-    supplier,
-    date,
-    document_type: documentType as Document['document_type'],
-    category,
-  })
 }

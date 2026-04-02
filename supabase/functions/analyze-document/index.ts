@@ -49,22 +49,48 @@ function getMediaType(filename: string): string {
 
 // ─── Nomenclature ─────────────────────────────────────────────────────────────
 
-function generateFilename(result: AnalysisResult): string {
-  const date = result.date?.replace(/-/g, '') ?? 'XXXXXXXX'
-  const supplier = normalizeSegment(result.supplier ?? 'FOURNISSEUR')
-  const type = (result.document_type ?? 'DOCUMENT').toUpperCase()
-  const category = normalizeSegment(result.category ?? 'CATEGORIE')
-  return `${date}_${supplier}_${type}_${category}.pdf`
+interface NomenclatureSettings {
+  separator?: string
+  case?: 'UPPER' | 'LOWER'
+  ndf_prefix?: boolean
 }
 
-function normalizeSegment(value: string): string {
-  return value
+function generateFilename(result: AnalysisResult, settings?: NomenclatureSettings): string {
+  const sep = settings?.separator ?? '_'
+  const upper = settings?.case !== 'LOWER'
+  const ndfPrefix = settings?.ndf_prefix ?? false
+  const isNdf = result.document_type === 'ndf'
+
+  const parts: string[] = []
+
+  parts.push(result.date?.replace(/-/g, '') ?? 'XXXXXXXX')
+
+  if (ndfPrefix && isNdf) {
+    parts.push(upper ? 'NDF' : 'ndf')
+  }
+
+  parts.push(normalizeSegment(result.supplier ?? 'FOURNISSEUR', upper))
+
+  if (!(ndfPrefix && isNdf)) {
+    parts.push(upper
+      ? (result.document_type ?? 'DOCUMENT').toUpperCase()
+      : (result.document_type ?? 'document').toLowerCase()
+    )
+  }
+
+  parts.push(normalizeSegment(result.category ?? 'CATEGORIE', upper))
+
+  return parts.join(sep) + '.pdf'
+}
+
+function normalizeSegment(value: string, upper: boolean): string {
+  const normalized = value
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9]/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '')
-    .toUpperCase()
+  return upper ? normalized.toUpperCase() : normalized.toLowerCase()
 }
 
 // ─── Claude analysis prompt ───────────────────────────────────────────────────
@@ -81,7 +107,19 @@ Champs à extraire :
 - amount_ttc : montant toutes taxes comprises dans la devise d'origine, nombre décimal (ex: 119.00), null si absent
 - vat_amount : montant de la TVA dans la devise d'origine, nombre décimal (ex: 19.83), null si absent
 - document_type : type parmi exactement ["facture", "ndf", "ticket", "avoir"]
-- category : catégorie parmi exactement ["MATERIEL", "FOURNITURES", "DEPLACEMENT", "REPAS", "TELECOM", "LOGICIELS", "FORMATION", "AUTRES"]
+- category : catégorie parmi exactement ["REPAS", "ALIMENTATION", "LOGICIEL", "LOYER", "TELECOMMUNICATION", "MATERIEL", "PRESTATION", "MARKETING", "DEPLACEMENT", "ASSURANCE", "AUTRES"]
+  Règles de catégorisation :
+  · REPAS : restaurant, brasserie, café, repas d'affaires (ex: Neko Ramen, Basta Cosi, Au Fond du Jardin)
+  · ALIMENTATION : supermarché, épicerie, boulangerie (achat snack/courses), courses alimentaires non-restaurant (ex: Monoprix, Carrefour, CRF City)
+  · LOGICIEL : SaaS, abonnement logiciel, licence, outil en ligne (ex: Claap, Frame.io, Submagic, Lovable, ChatGPT, Yousign, Notion, Adobe)
+  · LOYER : loyer, location de bureau, studio, espace de coworking
+  · TELECOMMUNICATION : internet, fibre, téléphone, mobile (ex: Orange, SFR, Sosh, Bouygues)
+  · MATERIEL : matériel informatique, photo/vidéo, équipements, câbles, accessoires (ex: Amazon, Apple, Fnac, Camshot, SmallRig)
+  · PRESTATION : prestataire, freelance, consultant, agence, sous-traitant, post-production (ex: Hugo Bousquet, Nathan-Do)
+  · MARKETING : publicité, marketing digital, communication, création graphique, stratégie (ex: Bidmetrics)
+  · DEPLACEMENT : transport, taxi, VTC, train, avion, carburant, parking, péage, amende
+  · ASSURANCE : assurance, mutuelle, garantie, RC Pro, protection juridique (ex: Alan, Apple Care, Orus)
+  · AUTRES : tout ce qui ne correspond pas aux catégories ci-dessus
 - confidence_scores : objet avec un score entier de 0 à 100 pour chaque champ ci-dessus (supplier, date, amount_ht, amount_ttc, vat_amount, document_type, category) + "overall" (confiance globale)
 
 Règles :
@@ -125,7 +163,7 @@ function parseClaudeResponse(text: string): AnalysisResult {
 
   // Validate and sanitize
   const validTypes = ['facture', 'ndf', 'ticket', 'avoir']
-  const validCategories = ['MATERIEL', 'FOURNITURES', 'DEPLACEMENT', 'REPAS', 'TELECOM', 'LOGICIELS', 'FORMATION', 'AUTRES']
+  const validCategories = ['REPAS', 'ALIMENTATION', 'LOGICIEL', 'LOYER', 'TELECOMMUNICATION', 'MATERIEL', 'PRESTATION', 'MARKETING', 'DEPLACEMENT', 'ASSURANCE', 'AUTRES']
 
   const rawCurrency = typeof parsed.currency === 'string' ? parsed.currency.trim().toUpperCase() : 'EUR'
   const currency = /^[A-Z]{3}$/.test(rawCurrency) ? rawCurrency : 'EUR'
@@ -310,8 +348,90 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ── Fetch workspace settings (nomenclature + supplier lookup) ────────────
+    const { data: wsData } = await supabaseAdmin
+      .from('workspaces')
+      .select('settings')
+      .eq('id', doc.workspace_id)
+      .single()
+    const nomenclature = (wsData?.settings as Record<string, unknown> | null)?.nomenclature as NomenclatureSettings | undefined
+
+    // ── Supplier knowledge base lookup ───────────────────────────────────────
+    if (analysisResult.supplier) {
+      const normalizedSupplier = normalizeSegment(analysisResult.supplier, true)
+      const { data: knownSupplier } = await supabaseAdmin
+        .from('supplier_categories')
+        .select('category')
+        .eq('workspace_id', doc.workspace_id)
+        .eq('supplier_name', normalizedSupplier)
+        .single()
+
+      if (knownSupplier) {
+        // Fournisseur connu → on utilise la catégorie mémorisée
+        console.log(`Supplier "${normalizedSupplier}" found in knowledge base: ${knownSupplier.category}`)
+        analysisResult.category = knownSupplier.category
+      } else {
+        // Fournisseur inconnu → recherche Wikipedia (gratuit, sans clé)
+        let webCategory: string | null = null
+
+        try {
+          const query = encodeURIComponent(analysisResult.supplier)
+          // Essai en français d'abord, puis en anglais
+          let extract: string | null = null
+          for (const lang of ['fr', 'en']) {
+            const wikiRes = await fetch(
+              `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${query}&srlimit=1&format=json&origin=*`,
+              { headers: { 'User-Agent': 'InGestia/1.0' } },
+            )
+            if (!wikiRes.ok) continue
+            const wikiData = await wikiRes.json()
+            const title = wikiData?.query?.search?.[0]?.snippet
+            if (title) { extract = title; break }
+          }
+
+          if (extract) {
+            // Mini appel Claude pour classifier depuis l'extrait Wikipedia
+            const classifyMsg = await anthropic.messages.create({
+              model: 'claude-haiku-4-5-20251001',
+              max_tokens: 20,
+              messages: [{
+                role: 'user',
+                content: `Classe cette entreprise dans UNE seule catégorie parmi : REPAS, ALIMENTATION, LOGICIEL, LOYER, TELECOMMUNICATION, MATERIEL, PRESTATION, MARKETING, DEPLACEMENT, ASSURANCE, AUTRES.\n\nEntreprise : ${analysisResult.supplier}\nDescription : ${extract.replace(/<[^>]*>/g, '')}\n\nRéponds avec uniquement le nom de la catégorie, rien d'autre.`,
+              }],
+            })
+            const classifiedCategory = classifyMsg.content[0].type === 'text'
+              ? classifyMsg.content[0].text.trim().toUpperCase()
+              : null
+
+            const validCats = ['REPAS', 'ALIMENTATION', 'LOGICIEL', 'LOYER', 'TELECOMMUNICATION', 'MATERIEL', 'PRESTATION', 'MARKETING', 'DEPLACEMENT', 'ASSURANCE', 'AUTRES']
+            if (classifiedCategory && validCats.includes(classifiedCategory)) {
+              webCategory = classifiedCategory
+            }
+          }
+        } catch (e) {
+          console.warn('Wikipedia lookup failed:', e)
+        }
+
+        // N'utiliser Wikipedia que si ça apporte une vraie réponse (pas AUTRES)
+        // Si Wikipedia dit AUTRES, on garde la catégorie que Claude a déjà trouvée
+        const usefulWebCategory = (webCategory && webCategory !== 'AUTRES') ? webCategory : null
+        const categoryToStore = usefulWebCategory ?? analysisResult.category ?? 'AUTRES'
+        if (usefulWebCategory) analysisResult.category = usefulWebCategory
+
+        await supabaseAdmin
+          .from('supplier_categories')
+          .upsert({
+            workspace_id: doc.workspace_id,
+            supplier_name: normalizedSupplier,
+            category: categoryToStore,
+            source: usefulWebCategory ? 'web_search' : 'ai',
+          }, { onConflict: 'workspace_id,supplier_name', ignoreDuplicates: true })
+          .then(() => console.log(`Supplier "${normalizedSupplier}" stored with category: ${categoryToStore}`))
+      }
+    }
+
     // ── Generate final filename ──────────────────────────────────────────────
-    const finalFilename = generateFilename(analysisResult)
+    const finalFilename = generateFilename(analysisResult, nomenclature)
 
     // ── Update document in DB (service role) ─────────────────────────────────
     const { error: updateError } = await supabaseAdmin

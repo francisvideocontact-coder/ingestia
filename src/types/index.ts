@@ -4,10 +4,9 @@ export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'viewer'
 
 export interface WorkspaceSettings {
   nomenclature?: {
-    date_format?: string
     separator?: string
     case?: 'UPPER' | 'LOWER'
-    ndf_suffix?: boolean
+    ndf_prefix?: boolean
   }
   categories?: string[]
   drive_folder_id?: string

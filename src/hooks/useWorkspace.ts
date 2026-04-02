@@ -11,6 +11,7 @@ interface UseWorkspaceReturn {
   loading: boolean
   error: string | null
   switchWorkspace: (id: string) => void
+  refreshWorkspaces: () => void
 }
 
 export function useWorkspace(): UseWorkspaceReturn {
@@ -20,6 +21,37 @@ export function useWorkspace(): UseWorkspaceReturn {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const fetchWorkspaces = async () => {
+    if (!user) return
+    setLoading(true)
+    setError(null)
+
+    const { data, error: fetchError } = await supabase
+      .from('workspaces')
+      .select('*')
+      .order('created_at', { ascending: true })
+
+    if (fetchError) {
+      setError(fetchError.message)
+      setLoading(false)
+      return
+    }
+
+    const list = (data as Workspace[]) ?? []
+    setWorkspaces(list)
+
+    if (list.length === 0) {
+      setWorkspace(null)
+      setLoading(false)
+      return
+    }
+
+    const savedId = localStorage.getItem(ACTIVE_WORKSPACE_KEY)
+    const active = list.find((w) => w.id === savedId) ?? list[0]
+    setWorkspace(active)
+    setLoading(false)
+  }
+
   useEffect(() => {
     if (!user) {
       setWorkspaces([])
@@ -27,39 +59,6 @@ export function useWorkspace(): UseWorkspaceReturn {
       setLoading(false)
       return
     }
-
-    const fetchWorkspaces = async () => {
-      setLoading(true)
-      setError(null)
-
-      // Fetch workspaces where user is a member (via RLS)
-      const { data, error: fetchError } = await supabase
-        .from('workspaces')
-        .select('*')
-        .order('created_at', { ascending: true })
-
-      if (fetchError) {
-        setError(fetchError.message)
-        setLoading(false)
-        return
-      }
-
-      const list = (data as Workspace[]) ?? []
-      setWorkspaces(list)
-
-      if (list.length === 0) {
-        setWorkspace(null)
-        setLoading(false)
-        return
-      }
-
-      // Restore active workspace from localStorage
-      const savedId = localStorage.getItem(ACTIVE_WORKSPACE_KEY)
-      const active = list.find((w) => w.id === savedId) ?? list[0]
-      setWorkspace(active)
-      setLoading(false)
-    }
-
     fetchWorkspaces()
   }, [user])
 
@@ -71,5 +70,7 @@ export function useWorkspace(): UseWorkspaceReturn {
     }
   }
 
-  return { workspace, workspaces, loading, error, switchWorkspace }
+  const refreshWorkspaces = () => fetchWorkspaces()
+
+  return { workspace, workspaces, loading, error, switchWorkspace, refreshWorkspaces }
 }

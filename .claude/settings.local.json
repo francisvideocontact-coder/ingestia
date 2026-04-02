@@ -32,7 +32,16 @@
       "Bash(grep -r \"TODO\\\\|FIXME\\\\|XXX\" /Users/francis/ingestia/src --include=*.tsx --include=*.ts)",
       "Bash(xargs -I {} basename {})",
       "Bash(npm install:*)",
-      "Bash(npm list:*)"
+      "Bash(npm list:*)",
+      "Bash(vercel --prod)",
+      "Bash(grep -r \"SUPABASE_DB_URL\\\\|db_url\\\\|DATABASE_URL\" /Users/francis/ingestia/.env*)",
+      "Bash(grep -r SUPABASE /Users/francis/ingestia/.env*)",
+      "Read(//Users/francis/.supabase/**)",
+      "Read(//Users/francis/**)",
+      "Bash(find ~ -name *.json -path *supabase*)",
+      "Bash(for m:*)",
+      "Bash(do npx:*)",
+      "Bash(done)"
     ]
   }
 }

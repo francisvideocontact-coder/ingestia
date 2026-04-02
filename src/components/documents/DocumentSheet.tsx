@@ -26,13 +26,16 @@ const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
 ]
 
 const CATEGORIES = [
-  'MATERIEL',
-  'FOURNITURES',
-  'DEPLACEMENT',
   'REPAS',
-  'TELECOM',
-  'LOGICIELS',
-  'FORMATION',
+  'ALIMENTATION',
+  'LOGICIEL',
+  'LOYER',
+  'TELECOMMUNICATION',
+  'MATERIEL',
+  'PRESTATION',
+  'MARKETING',
+  'DEPLACEMENT',
+  'ASSURANCE',
   'AUTRES',
 ]
 
@@ -136,6 +139,19 @@ export default function DocumentSheet({ document: doc, open, onClose, onUpdate, 
         final_filename: previewedFilename,
       }
       await onUpdate(doc.id, changes)
+
+      // Mémoriser la correction fournisseur → catégorie dans la base de connaissances
+      if (supplier && category && workspaceId) {
+        const normalizedSupplier = supplier
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+          .toUpperCase()
+        await supabase.from('supplier_categories').upsert(
+          { workspace_id: workspaceId, supplier_name: normalizedSupplier, category, source: 'manual' },
+          { onConflict: 'workspace_id,supplier_name' }
+        )
+      }
+
       onClose()
     } catch {
       // keep sheet open on error
@@ -256,7 +272,22 @@ export default function DocumentSheet({ document: doc, open, onClose, onUpdate, 
 
               {/* Type de document */}
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Type de document</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground">Type de document</Label>
+                  {canEdit && (
+                    <button
+                      onClick={() => setDocumentType(documentType === 'ndf' ? '' : 'ndf')}
+                      className={cn(
+                        'px-2 py-0.5 rounded text-xs font-medium transition-colors',
+                        documentType === 'ndf'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/60'
+                      )}
+                    >
+                      NDF
+                    </button>
+                  )}
+                </div>
                 <select
                   value={documentType}
                   onChange={(e) => setDocumentType(e.target.value as DocumentType)}

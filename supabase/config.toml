@@ -78,3 +78,9 @@ verify_jwt = false
 
 [functions.list-drive-folders]
 verify_jwt = false
+
+[functions.scan-drive-suppliers]
+verify_jwt = false
+
+[functions.invite-member]
+verify_jwt = false

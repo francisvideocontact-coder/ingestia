@@ -113,7 +113,7 @@ export default function DashboardPage() {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const { workspace, workspaces, loading: wsLoading } = useWorkspace()
+  const { workspace, workspaces, loading: wsLoading, refreshWorkspaces } = useWorkspace()
   const {
     documents,
     uploading,
@@ -241,6 +241,7 @@ export default function DashboardPage() {
         onClose={() => setSettingsOpen(false)}
         workspaceId={workspace?.id}
         workspaceName={workspace?.name}
+        onWorkspaceRenamed={refreshWorkspaces}
       />
     </div>
   )
